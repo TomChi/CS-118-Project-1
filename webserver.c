@@ -9,15 +9,117 @@
 #include <sys/types.h>
 #include <time.h> 
 
+/* HTTP response and header for a successful request.  */
+
+static char* ok_response =
+    "HTTP/1.1 200 OK\n"
+    "Content-type: text/html\n"
+    "\n";
+
+/* HTTP response, header, and body indicating that the we didn't
+   understand the request.  */
+
+static char* bad_request_response = 
+    "HTTP/1.1 400 Bad Request\n"
+    "Content-type: text/html\n"
+    "\n"
+    "<html>\n"
+    " <body>\n"
+    "  <h1>Bad Request</h1>\n"
+    "  <p>This server did not understand your request.</p>\n"
+    " </body>\n"
+    "</html>\n";
+
+/* HTTP response, header, and body template indicating that the
+   requested document was not found.  */
+
+static char* not_found_response_template = 
+    "HTTP/1.1 404 Not Found\n"
+    "Content-type: text/html\n"
+    "\n"
+    "<html>\n"
+    " <body>\n"
+    "  <h1>Not Found</h1>\n"
+    "  <p>The requested URL %s was not found on this server.</p>\n"
+    " </body>\n"
+    "</html>\n";
+
+/* HTTP response, header, and body template indicating that the
+   method was not understood.  */
+
+static char* bad_method_response_template = 
+    "HTTP/1.1 501 Method Not Implemented\n"
+    "Content-type: text/html\n"
+    "\n"
+    "<html>\n"
+    " <body>\n"
+    "  <h1>Method Not Implemented</h1>\n"
+    "  <p>The method %s is not implemented by this server.</p>\n"
+    " </body>\n"
+    "</html>\n";
+
 void error(char *msg)
 {
     perror(msg);
     exit(1);
 }
 
+static void get_resource (int requestfd, char* url) {
+    printf("Retrieving resource %s\n", url);
+    write(requestfd, ok_response, strlen (ok_response));
+}
+
+static void handle_request (int requestfd)
+{
+    char buffer[512];
+    ssize_t bytes_read;
+
+    /* Read some data from the client.  */
+    bytes_read = read (requestfd, buffer, sizeof (buffer) - 1);
+    if (bytes_read > 0) {
+        char method[sizeof (buffer)];
+        char url[sizeof (buffer)];
+        char protocol[sizeof (buffer)];
+
+        /* Some data was read successfully.  NUL-terminate the buffer so
+        we can use string operations on it.  */
+        buffer[bytes_read] = '\0';
+        /* The first line the client sends is the HTTP request, which is
+        composed of a method, the requested page, and the protocol
+        version.  */
+        sscanf (buffer, "%s %s %s", method, url, protocol);
+        printf("Received request:\n%s", buffer);
+
+        /* Check the protocol field.  We understand HTTP versions 1.0 and
+        1.1.  */
+        if (strcmp (protocol, "HTTP/1.0") && strcmp (protocol, "HTTP/1.1")) {
+            /* We don't understand this protocol.  Report a bad response.  */
+            write (requestfd, bad_request_response, strlen (bad_request_response));
+        }
+        else if (strcmp (method, "GET")) {
+            /* This server only implements the GET method.  The client
+            specified some other method, so report the failure.  */
+            char response[1024];
+
+            snprintf (response, sizeof (response), bad_method_response_template, method);
+            write (requestfd, response, strlen (response));
+        }
+        else 
+            /* A valid request.  Process it.  */
+            get_resource (requestfd, url);
+    }
+    else if (bytes_read == 0)
+        /* The client closed the connection before sending any data.
+        Nothing to do.  */
+        ;
+    else 
+        /* The call to read failed.  */
+        error("ERROR reading from request");
+}
+
 int main(int argc, char *argv[])
 {
-    int listenfd = 0, connfd = 0;
+    int listenfd = 0, requestfd = 0;
     struct sockaddr_in serv_addr, cli_addr; 
 
     char buffer[1025];
@@ -51,9 +153,10 @@ int main(int argc, char *argv[])
     while(1)
     {
         // the server is put to sleep and when for an incoming client request, the three way TCP handshake* is complete, the function accept () wakes up and returns the socket descriptor representing the client socket.
-        connfd = accept(listenfd, (struct sockaddr*) &cli_addr, (unsigned int *) &clilen); 
-        if (connfd < 0)
+        requestfd = accept(listenfd, (struct sockaddr*) &cli_addr, (unsigned int *) &clilen); 
+        if (requestfd < 0)
             error("ERROR on accept");
+        printf("Connected to %s.\n", inet_ntoa(cli_addr.sin_addr));
 
         // each connection gets its own forked process
         pid = fork();
@@ -63,18 +166,17 @@ int main(int argc, char *argv[])
             // close file descriptor in fork
             close(listenfd);
 
-            bzero(buffer, 1025);
-            // As soon as server gets a request from client, it writes it to stdout
-            n = read(connfd, buffer, 1024);
-            if (n < 0)
-                error("ERROR reading from socket");
-            printf("%s\n", buffer);
+            handle_request(requestfd);
 
+            if (close(requestfd) < 0)
+                error("ERROR closing connection");
             // end forked process
-            exit(0);
+            exit(EXIT_SUCCESS);
         }
         else {
-            close(connfd);
+            if (close(requestfd) < 0)
+                error("ERROR closing connection in parent");
+            waitpid(-1, NULL, WNOHANG);
         }
-     }
+    }
 }
