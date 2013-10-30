@@ -8,4 +8,12 @@ Use gcc to compile. Ping server from a browser.
 Requirements:
 1. Print out received requests - DONE
 2. Handle requests and extract requested file name - DONE
-3. Retrieve requested resource and write to connection - TODO
+3. Retrieve requested resource and write to connection - DONE
+
+For now, the server only serves HTML, JPEG and GIF files. Other file types are not supported. 
+Tested with:
+	test.html
+	maru.jpg
+	maru.gif
+
+TODO: make the server more when handling unsupported types.

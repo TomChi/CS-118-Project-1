@@ -8,12 +8,13 @@
 #include <string.h>
 #include <sys/types.h>
 #include <time.h> 
+#include <fcntl.h>
 
 /* HTTP response and header for a successful request.  */
 
-static char* ok_response =
+static char* ok_response_template =
     "HTTP/1.1 200 OK\n"
-    "Content-type: text/html\n"
+    "Content-type: %s\n"
     "\n";
 
 /* HTTP response, header, and body indicating that the we didn't
@@ -65,8 +66,44 @@ void error(char *msg)
 }
 
 static void get_resource (int requestfd, char* url) {
+    int resourcefd, i;
+    char c, *file_type, *header_type;
+    char response[1024];
+
     printf("Retrieving resource %s\n", url);
-    write(requestfd, ok_response, strlen (ok_response));
+
+    // Try to open the file. If we can't open the file, tell the client we can't find it and log the error to stderr.
+    resourcefd = open(++url, O_RDONLY);
+    if (resourcefd < 0) {
+        snprintf (response, sizeof (response), not_found_response_template, url);
+        write (requestfd, response, strlen (response));
+        error ("ERROR opening file");
+    }
+    
+    // Get the file extension. If there isn't one explicitly stated, then assume HTML
+    file_type = strrchr (url, '.');
+    if (!file_type)
+        file_type = "html";
+    else
+        file_type++;
+
+    // Match the header type with the file type in generating the response. Only support JPEG, GIF, and HTML files for now.
+    if (strcasecmp (file_type, "jpg") == 0 || strcasecmp (file_type, "jpeg") == 0)
+        header_type = "image/jpeg";
+    else if (strcasecmp (file_type, "gif") == 0)
+        header_type = "image/gif";
+    else
+        header_type = "text/html";
+
+    // Begin to write the response to the client: OK, file type
+    snprintf(response, sizeof (response), ok_response_template, header_type);
+    write(requestfd, response, strlen (response));
+    while ( (i = read(resourcefd, &c, 1)) ) {
+        if ( i < 0 )
+            error("ERROR reading from file.");
+        if ( write(requestfd, &c, 1) < 1 )
+            error("ERROR sending file.");
+    }
 }
 
 static void handle_request (int requestfd)
