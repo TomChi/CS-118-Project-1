@@ -104,10 +104,30 @@ static void handle_request (int requestfd)
             snprintf (response, sizeof (response), bad_method_response_template, method);
             write (requestfd, response, strlen (response));
         }
-        else 
+        else {
             /* A valid request.  Process it.  */
             get_resource (requestfd, url);
+
+            /* Open the resource file as read only. */
+            FILE * resource = fopen("test.html", "r");
+
+            /* Read through resource line by line with a maximum of 80 characters in a line */
+            if (resource != NULL) {
+                char line[80];
+                printf("HTTP Response Message:\n");
+
+                /* Write to stdout, line by line. */
+                while (fgets(line, sizeof(line), resource) != NULL) {
+                    fputs(line, stdout);
+                }
+
+                fclose(resource);
+            }
+        }
     }
+
+
+
     else if (bytes_read == 0)
         /* The client closed the connection before sending any data.
         Nothing to do.  */
