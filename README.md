@@ -2,10 +2,10 @@ CS-118-Project-1
 ================
 
 Matthew Cheng
-503814451
+UID: 503814451
 
 Evan Shi
-
+UID: 103802860
 
 Basic web server in c serving MIME files over TCP connections.
 
