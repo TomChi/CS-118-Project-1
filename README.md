@@ -1,6 +1,12 @@
 CS-118-Project-1
 ================
 
+Matthew Cheng
+503814451
+
+Evan Shi
+
+
 Basic web server in c serving MIME files over TCP connections.
 
 Use gcc to compile. Ping server from a browser.
